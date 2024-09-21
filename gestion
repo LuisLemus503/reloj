@@ -1,0 +1,257 @@
+import tkinter as tk
+from tkinter import messagebox
+
+class Panelista:
+    def __init__(self, nombre, minutos, segundos):
+        self.nombre = nombre
+        self.minutos = minutos
+        self.segundos = segundos
+        self.tiempo_original = minutos * 60 + segundos
+        self.tiempo_restante = self.tiempo_original
+        self.corriendo = False
+
+    def iniciar(self):
+        self.corriendo = True
+        self.tiempo_restante = self.tiempo_original  # Reiniciar al tiempo original
+
+    def parar(self):
+        self.corriendo = False
+
+    def actualizar_tiempo(self):
+        if self.corriendo and self.tiempo_restante > 0:
+            self.tiempo_restante -= 1
+
+    def tiempo_formateado(self):
+        minutos = self.tiempo_restante // 60
+        segundos = self.tiempo_restante % 60
+        return f"{minutos:02}:{segundos:02}"
+
+    def tiempo_original_formateado(self):
+        minutos = self.tiempo_original // 60
+        segundos = self.tiempo_original % 60
+        return f"{minutos:02}:{segundos:02}"
+
+class Aplicacion:
+    def __init__(self, root, display):
+        self.root = root
+        self.display = display
+        self.root.title("Administrador de Temporizador")
+        self.display.title("Temporizador")
+        self.panelistas = []
+        self.panelista_activo = None
+        self.parpadeo_activo = False
+        self.panelista_editando = None
+        self.label_activo = None
+        self.actualizacion_en_curso = False  # Bandera para controlar actualizaciones
+        self.parpadeo_ciclo_activo = False   # Nueva bandera para el parpadeo
+        self.botones_panelistas = []  # Guardar los botones de "Parar" y "Reanudar"
+
+        # Configurar la ventana del temporizador para que sea de pantalla completa
+        self.display.attributes('-fullscreen', True)
+        self.display.configure(bg="black")
+
+        self.frame = tk.Frame(root)
+        self.frame.pack()
+        self.frame.pack_propagate(False)  # Desactivar la propagación del tamaño
+        self.frame.config(width=300, height=150)  # Ajusta el tamaño según tus necesidades
+
+        tk.Label(self.frame, text="Nombre:").grid(row=0, column=0)
+        self.nombre_entry = tk.Entry(self.frame)
+        self.nombre_entry.grid(row=0, column=1)
+
+        tk.Label(self.frame, text="Minutos:").grid(row=1, column=0)
+        self.minutos_entry = tk.Entry(self.frame)
+        self.minutos_entry.grid(row=1, column=1)
+
+        tk.Label(self.frame, text="Segundos:").grid(row=2, column=0)
+        self.segundos_entry = tk.Entry(self.frame)
+        self.segundos_entry.grid(row=2, column=1)
+
+        self.agregar_button = tk.Button(self.frame, text="Agregar Panelista", command=self.agregar_panelista)
+        self.agregar_button.grid(row=3, column=0, columnspan=2)
+
+        self.limpiar_button = tk.Button(self.frame, text="Limpiar Temporizador", command=self.limpiar_temporizador)
+        self.limpiar_button.grid(row=4, column=0, columnspan=2)
+
+        self.panelistas_frame = tk.Frame(root)
+        self.panelistas_frame.pack()
+
+        self.display_label = tk.Label(display, text="", font=("Helvetica", 475), bg="black", fg="white")
+        self.display_label.pack(expand=True, fill='both')
+
+        self.actualizar()
+
+    def agregar_panelista(self):
+        try:
+            nombre = self.nombre_entry.get()
+            minutos = int(self.minutos_entry.get())
+            segundos = int(self.segundos_entry.get())
+            if self.panelista_editando:
+                self.panelista_editando.nombre = nombre
+                self.panelista_editando.minutos = minutos
+                self.panelista_editando.segundos = segundos
+                self.panelista_editando.tiempo_original = minutos * 60 + segundos
+                self.panelista_editando.tiempo_restante = self.panelista_editando.tiempo_original
+                self.panelista_editando = None
+            else:
+                panelista = Panelista(nombre, minutos, segundos)
+                self.panelistas.append(panelista)
+            self.mostrar_panelistas()
+            self.nombre_entry.delete(0, tk.END)
+            self.minutos_entry.delete(0, tk.END)
+            self.segundos_entry.delete(0, tk.END)
+        except ValueError:
+            messagebox.showerror("Entrada no válida", "Por favor, ingrese números válidos para minutos y segundos.")
+
+    def mostrar_panelistas(self):
+        for widget in self.panelistas_frame.winfo_children():
+            widget.destroy()
+
+        self.botones_panelistas = []  # Reiniciar la lista de botones
+
+        for i, panelista in enumerate(self.panelistas):
+            label_nombre = tk.Label(self.panelistas_frame, text=panelista.nombre, bg="white")
+            label_nombre.grid(row=i, column=0)
+            tk.Label(self.panelistas_frame, text=panelista.tiempo_original_formateado()).grid(row=i, column=1)
+
+            # Botones de iniciar, parar y reanudar
+            btn_iniciar = tk.Button(self.panelistas_frame, text="Iniciar", command=lambda p=panelista: self.iniciar_panelista(p))
+            btn_iniciar.grid(row=i, column=2)
+
+            btn_parar = tk.Button(self.panelistas_frame, text="Parar", command=lambda p=panelista: self.parar_panelista(p))
+            btn_parar.grid(row=i, column=3)
+
+            btn_reanudar = tk.Button(self.panelistas_frame, text="Reanudar", command=lambda p=panelista: self.reanudar_panelista(p))
+            btn_reanudar.grid(row=i, column=4)
+
+            # Guardar los botones de parar y reanudar en la lista
+            self.botones_panelistas.append((btn_parar, btn_reanudar))
+
+            tk.Button(self.panelistas_frame, text="Editar", command=lambda p=panelista: self.editar_panelista(p)).grid(row=i, column=5)
+            tk.Button(self.panelistas_frame, text="Eliminar", command=lambda p=panelista: self.eliminar_panelista(p)).grid(row=i, column=6)
+
+            # Cambiar el color del panelista activo
+            if panelista == self.panelista_activo:
+                label_nombre.config(bg="yellow")
+                self.label_activo = label_nombre
+
+    def iniciar_panelista(self, panelista):
+        if self.panelista_activo:
+            self.panelista_activo.parar()
+            if self.label_activo:
+                self.label_activo.config(bg="white")  # Restaurar el color del panelista anterior
+
+        self.panelista_activo = panelista
+        panelista.iniciar()
+        self.parpadeo_activo = False
+        self.parpadeo_ciclo_activo = False  # Restablecer ciclo de parpadeo al iniciar
+        self.display_label.config(bg="black", fg="white", font=("Helvetica", 475))
+        self.actualizacion_en_curso = False  # Reiniciar la bandera de actualización
+        self.actualizar_display(panelista)
+        self.mostrar_panelistas()  # Actualizar la lista de panelistas para reflejar el cambio de color
+
+        # Deshabilitar los botones de parar y reanudar de otros panelistas
+        for btn_parar, btn_reanudar in self.botones_panelistas:
+            btn_parar.config(state=tk.DISABLED)
+            btn_reanudar.config(state=tk.DISABLED)
+
+        # Habilitar solo los botones del panelista activo
+        idx = self.panelistas.index(panelista)
+        self.botones_panelistas[idx][0].config(state=tk.NORMAL)  # Parar
+        self.botones_panelistas[idx][1].config(state=tk.NORMAL)  # Reanudar
+
+    def parar_panelista(self, panelista):
+        panelista.parar()
+
+    def reanudar_panelista(self, panelista):
+        if self.panelista_activo:
+            self.panelista_activo.parar()
+            if self.label_activo:
+                self.label_activo.config(bg="white")  # Restaurar el color del panelista anterior
+
+        self.panelista_activo = panelista
+        panelista.corriendo = True  # Reanudar sin reiniciar el tiempo restante
+        self.parpadeo_activo = False  # Reiniciar el estado del parpadeo
+        self.parpadeo_ciclo_activo = False  # Asegurarse de que el parpadeo se maneje correctamente
+        self.actualizacion_en_curso = False  # Permitir actualización continua
+        self.actualizar_display(panelista)
+
+        # Deshabilitar los botones de otros panelistas
+        for btn_parar, btn_reanudar in self.botones_panelistas:
+            btn_parar.config(state=tk.DISABLED)
+            btn_reanudar.config(state=tk.DISABLED)
+
+        # Habilitar los botones del panelista activo
+        idx = self.panelistas.index(panelista)
+        self.botones_panelistas[idx][0].config(state=tk.NORMAL)  # Parar
+        self.botones_panelistas[idx][1].config(state=tk.NORMAL)  # Reanudar
+
+    def editar_panelista(self, panelista):
+        self.panelista_editando = panelista
+        self.nombre_entry.delete(0, tk.END)
+        self.nombre_entry.insert(0, panelista.nombre)
+        self.minutos_entry.delete(0, tk.END)
+        self.minutos_entry.insert(0, panelista.minutos)
+        self.segundos_entry.delete(0, tk.END)
+        self.segundos_entry.insert(0, panelista.segundos)
+
+    def eliminar_panelista(self, panelista):
+        self.panelistas.remove(panelista)
+        self.mostrar_panelistas()
+
+    def limpiar_temporizador(self):
+        if self.panelista_activo:
+            self.panelista_activo.parar()  # Detener el temporizador activo
+        self.display_label.config(text="", bg="black", fg="white")
+        self.panelista_activo = None
+        self.parpadeo_activo = False
+        self.parpadeo_ciclo_activo = False
+
+    def actualizar_display(self, panelista):
+        if not self.actualizacion_en_curso:  # Asegurarse de no duplicar el ciclo de actualización
+            self.actualizacion_en_curso = True
+
+            def ciclo_actualizacion():
+                if panelista.corriendo:
+                    self.display_label.config(text=panelista.tiempo_formateado(), font=("Helvetica", 475))
+                    if panelista.tiempo_restante > 0:
+                        if panelista.tiempo_restante <= 10:
+                            if not self.parpadeo_ciclo_activo:  # Iniciar un solo ciclo de parpadeo
+                                self.parpadeo_ciclo_activo = True
+                                self.parpadear_tiempo_restante()
+                        self.display.after(500, ciclo_actualizacion)
+                    else:
+                        self.parpadeo_activo = True
+                        self.parpadear_tiempo_terminado()
+                        self.panelista_activo = None  # Detener el tiempo transcurrido total
+                        self.actualizacion_en_curso = False  # Reiniciar bandera cuando termina el ciclo
+                else:
+                    self.display_label.config(fg="white", font=("Helvetica", 475))
+                    self.actualizacion_en_curso = False  # Reiniciar la bandera de actualización
+
+            ciclo_actualizacion()
+
+    def parpadear_tiempo_restante(self):
+        if self.parpadeo_ciclo_activo and not self.parpadeo_activo:
+            current_color = self.display_label.cget("fg")
+            next_color = "red" if current_color == "white" else "white"
+            self.display_label.config(fg=next_color)
+            self.display.after(500, self.parpadear_tiempo_restante)
+
+    def parpadear_tiempo_terminado(self):
+        if self.parpadeo_activo:
+            current_color = self.display_label.cget("fg")
+            next_color = "red" if current_color == "white" else "white"
+            self.display_label.config(text="TIEMPO\nAGOTADO!", fg=next_color, font=("Helvetica", 250))
+            self.display.after(500, self.parpadear_tiempo_terminado)
+
+    def actualizar(self):
+        for panelista in self.panelistas:
+            panelista.actualizar_tiempo()
+        self.root.after(1000, self.actualizar)  # Actualizar cada segundo
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    display = tk.Toplevel()
+    app = Aplicacion(root, display)
+    root.mainloop()
